@@ -62,7 +62,7 @@ class MainWindow(QMainWindow):
         result = QFileDialog.getOpenFileName(
             self, "Open Model", "./", "Model Files (*.h5)")
         fileName = result[0]
-        self.serverStatus.setText("Model Loaded")
+        self.serverStatus.setText("Model Loaded: " + fileName)
         self.widget.loadModel(fileName)
 
 
@@ -118,7 +118,8 @@ class MainWidget(QWidget):
             self.frameN = 0
         if (self.frameN > self.frameMax):
             self.frameN = self.frameMax
-        self.navigation.frameLabel.setText(str(self.frameN))
+        self.navigation.frameLabel.setText(
+            str(self.frameN) + " / " + str(self.frameMax))
 
         self.reader.set(cv2.CAP_PROP_POS_FRAMES, self.frameN)
         status, self.img = self.reader.read()

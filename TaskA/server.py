@@ -1,6 +1,7 @@
 import tensorflow as tf
 import zmq
 import json
+import numpy as np
 
 
 def process():
@@ -36,6 +37,7 @@ class Server:
     def handleMessage(self, message):
         response = {
             "loadModel": self.loadModelMessage,
+            "predict": self.predict,
             "shutdown": self.shutdownMessage
         }[message["opCode"]](message)
 
@@ -44,6 +46,17 @@ class Server:
     def loadModelMessage(self, message):
         self.loadModel(message["payload"])
         response = self.createResponse("loadModelResponse", "success")
+        return response
+
+    def predict(self, message):
+        img = message["payload"]
+        X = np.expand_dims(img, axis=0).astype("float32") / 255.
+        X = tf.image.resize(X, size=[512, 512])
+
+        Y = self.model.predict(X)
+        print(f"Y.shape = {Y.shape}")
+        print(f"Y.dtype = {Y.dtype}")
+        response = self.createResponse("predictResponse", Y.tolist())
         return response
 
     def shutdownMessage(self, message):

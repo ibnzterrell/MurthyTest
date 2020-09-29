@@ -76,6 +76,7 @@ class MainWidget(QWidget):
         self.layout.addWidget(self.canvas)
         self.client = Client()
         self.client.runServerProcess()
+        self.client.predictCallback = self.showPrediction
 
     def loadVideo(self, fileName):
         self.reader = cv2.VideoCapture(fileName)
@@ -84,9 +85,25 @@ class MainWidget(QWidget):
 
     def seekFrame(self, frameN):
         self.reader.set(cv2.CAP_PROP_POS_FRAMES, frameN)
-        status, img = self.reader.read()
-        img = img[:, :, :1]  # convert to grayscale
-        self.ax.imshow(img.squeeze(), cmap="gray")
+        status, self.img = self.reader.read()
+        self.img = self.img[:, :, :1]  # convert to grayscale
+        self.ax.imshow(self.img.squeeze(), cmap="gray")
+        print(self.img)
+        self.client.sendCommand("predict", self.img.tolist())
+        self.canvas.draw()
+
+    def showPrediction(self, response):
+        heatmap = np.asarray(response["payload"])
+        self.ax.imshow(self.img.squeeze(), cmap="gray")
+        self.ax.imshow(heatmap.squeeze(),
+                       extent=[
+            -0.5,
+            self.img.shape[1] - 0.5,
+            self.img.shape[0] - 0.5,
+            -0.5,
+        ],  # (left, right, top, bottom),
+            alpha=0.5
+        )
         self.canvas.draw()
 
     def loadModel(self, fileName):
@@ -103,6 +120,12 @@ class Client:
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.REQ)
         self.socket.connect("tcp://localhost:8888")
+        self.loadModelCallback = self.defaultCallback
+        self.predictCallback = self.defaultCallback
+        self.shutdownCallback = self.defaultCallback
+
+    def defaultCallback(self, message):
+        print("Callback Not Assigned")
 
     def stopServerProcess(self):
         self.sendCommand("shutdown")
@@ -115,6 +138,17 @@ class Client:
         }
         self.socket.send_json(command)
         response = self.socket.recv_json()
+        self.handleResponse(response)
+
+    def handleResponse(self, message):
+        {
+            "loadModelResponse": self.loadModelCallback,
+            "predictResponse": self.predictCallback,
+            "shutdownResponse": self.shutdownCallback
+        }[message["opCode"]](message)
+
+    def sendPrediction(self, X):
+        self.sendCommand("predict", X)
 
 
 if __name__ == "__main__":

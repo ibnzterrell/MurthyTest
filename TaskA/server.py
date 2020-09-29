@@ -4,28 +4,25 @@ import json
 import numpy as np
 
 
-def process():
-    server = Server()
-    server.eventLoop()
+def inferenceProcess():
+    inferenceServer = InferenceServer()
+    inferenceServer.eventLoop()
 
 
-class Server:
+class InferenceServer:
     def __init__(self):
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.REP)
-        self.socket.bind("tcp://*:8888")
+        self.portBinding = "tcp://*:8888"
+        self.socket.bind(self.portBinding)
         self.active = True
-        print("Server Started")
+        print("Inference Server Started on " + self.portBinding)
 
     def eventLoop(self):
         while self.active:
             message = self.socket.recv_json()
             response = self.handleMessage(message)
             self.socket.send_json(response)
-
-    def loadModel(self, modelFile):
-        print("Loading Model " + modelFile)
-        self.model = tf.keras.models.load_model(modelFile, compile=False)
 
     def createResponse(self, opCode, payload):
         response = {
@@ -36,31 +33,31 @@ class Server:
 
     def handleMessage(self, message):
         response = {
-            "loadModel": self.loadModelMessage,
-            "predict": self.predict,
-            "shutdown": self.shutdownMessage
+            "loadModel": self.loadModelMessageHandler,
+            "predict": self.predictMessageHandler,
+            "shutdown": self.shutdownMessageHandler
         }[message["opCode"]](message)
 
         return response
 
-    def loadModelMessage(self, message):
-        self.loadModel(message["payload"])
+    def loadModelMessageHandler(self, message):
+        modelFile = message["payload"]
+        print("Loading Model " + modelFile)
+        self.model = tf.keras.models.load_model(modelFile, compile=False)
         response = self.createResponse("loadModelResponse", "success")
         return response
 
-    def predict(self, message):
+    def predictMessageHandler(self, message):
         img = message["payload"]
         X = np.expand_dims(img, axis=0).astype("float32") / 255.
         X = tf.image.resize(X, size=[512, 512])
 
         Y = self.model.predict(X)
-        print(f"Y.shape = {Y.shape}")
-        print(f"Y.dtype = {Y.dtype}")
         response = self.createResponse("predictResponse", Y.tolist())
         return response
 
-    def shutdownMessage(self, message):
+    def shutdownMessageHandler(self, message):
         self.active = False
-        print("Shutting Down Server")
+        print("Shutting Down Inference Server")
         response = self.createResponse("shutdownResponse", "success")
         return response

@@ -47,8 +47,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Task A")
         self.setCentralWidget(self.widget)
 
-    def stopServerProcess(self):
-        self.widget.stopServerProcess()
+    def stopServers(self):
+        self.widget.stopServers()
 
     @Slot()
     def open_video(self):
@@ -86,13 +86,16 @@ class MainWidget(QWidget):
         self.canvas = FigureCanvas(self.figure)
         self.layout = QVBoxLayout(self)
         self.layout.addWidget(self.canvas)
+
+        # Add Navigation and Connect It
         self.navigation = NavigationWidget()
         self.layout.addWidget(self.navigation)
         self.navigation.nextFrameButton.clicked.connect(self.nextFrame)
         self.navigation.prevFrameButton.clicked.connect(self.prevFrame)
-        self.client = Client()
-        self.client.runServerProcess()
-        self.client.predictCallback = self.showPrediction
+
+        self.client = InferenceClient()
+        self.client.startServer()
+        self.client.predictCallback = self.receivePrediction
         self.frameN = 0
         self.frameMax = 0
 
@@ -118,20 +121,22 @@ class MainWidget(QWidget):
             self.frameN = 0
         if (self.frameN > self.frameMax):
             self.frameN = self.frameMax
-        self.navigation.frameLabel.setText(
-            str(self.frameN) + " / " + str(self.frameMax))
 
+        # Indicate current frame and number of frames
+        self.navigation.frameLabel.setText(
+            str(self.frameN + 1) + " / " + str(self.frameMax + 1))
+
+        # Decode frame
         self.reader.set(cv2.CAP_PROP_POS_FRAMES, self.frameN)
         status, self.img = self.reader.read()
         self.img = self.img[:, :, :1]  # convert to grayscale
 
-        # Show image while we wait for prediction
+        # Send image for prediction and show it while we wait
         self.ax.imshow(self.img.squeeze(), cmap="gray")
         self.canvas.draw()
+        self.client.askForPrediction(self.img.tolist())
 
-        self.client.sendCommand("predict", self.img.tolist())
-
-    def showPrediction(self, response):
+    def receivePrediction(self, response):
         heatmap = np.asarray(response["payload"])
         self.ax.imshow(self.img.squeeze(), cmap="gray")
         self.ax.imshow(heatmap.squeeze(),
@@ -146,15 +151,15 @@ class MainWidget(QWidget):
         self.canvas.draw()
 
     def loadModel(self, fileName):
-        self.client.sendCommand("loadModel", fileName)
+        self.client.loadModel(fileName)
 
-    def stopServerProcess(self):
-        self.client.stopServerProcess()
+    def stopServers(self):
+        self.client.shutdownServer()
 
 
-class Client:
-    def runServerProcess(self):
-        self.p = mp.Process(target=server.process)
+class InferenceClient:
+    def startServer(self):
+        self.p = mp.Process(target=server.inferenceProcess)
         self.p.start()
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.REQ)
@@ -165,10 +170,6 @@ class Client:
 
     def defaultCallback(self, message):
         print("Callback Not Assigned")
-
-    def stopServerProcess(self):
-        self.sendCommand("shutdown")
-        self.p.join()
 
     def sendCommand(self, opCode, payload=""):
         command = {
@@ -186,8 +187,15 @@ class Client:
             "shutdownResponse": self.shutdownCallback
         }[message["opCode"]](message)
 
-    def sendPrediction(self, X):
+    def loadModel(self, fileName):
+        self.sendCommand("loadModel", fileName)
+
+    def askForPrediction(self, X):
         self.sendCommand("predict", X)
+
+    def shutdownServer(self):
+        self.sendCommand("shutdown")
+        self.p.join()
 
 
 if __name__ == "__main__":
@@ -195,5 +203,5 @@ if __name__ == "__main__":
     mainWindow = MainWindow()
     mainWindow.show()
     result = app.exec_()
-    mainWindow.stopServerProcess()
+    mainWindow.stopServers()
     sys.exit(result)

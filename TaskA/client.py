@@ -1,6 +1,6 @@
 import sys
 from PySide2.QtWidgets import QAction, QApplication, QFileDialog, QHBoxLayout, QLabel, QMainWindow, QPushButton, QVBoxLayout, QWidget
-from PySide2.QtCore import Slot
+from PySide2.QtCore import Slot, Qt
 from PySide2.QtGui import QKeySequence
 import multiprocessing as mp
 import numpy as np
@@ -70,12 +70,25 @@ class NavigationWidget(QWidget):
     def __init__(self):
         QWidget.__init__(self)
         self.layout = QHBoxLayout(self)
-        self.frameLabel = QLabel("0")
+        self.frameLabel = QLabel("0 / 0")
+        self.frameLabel.setAlignment(Qt.AlignCenter)
+        self.firstFrameButton = QPushButton("|<")
         self.prevFrameButton = QPushButton("<")
         self.nextFrameButton = QPushButton(">")
+        self.prev2FrameButton = QPushButton("<<")
+        self.next2FrameButton = QPushButton(">>")
+        self.prev3FrameButton = QPushButton("<<<")
+        self.next3FrameButton = QPushButton(">>>")
+        self.lastFrameButton = QPushButton(">|")
+        self.layout.addWidget(self.firstFrameButton)
+        self.layout.addWidget(self.prev3FrameButton)
+        self.layout.addWidget(self.prev2FrameButton)
         self.layout.addWidget(self.prevFrameButton)
         self.layout.addWidget(self.frameLabel)
         self.layout.addWidget(self.nextFrameButton)
+        self.layout.addWidget(self.next2FrameButton)
+        self.layout.addWidget(self.next3FrameButton)
+        self.layout.addWidget(self.lastFrameButton)
 
 
 class MainWidget(QWidget):
@@ -90,8 +103,14 @@ class MainWidget(QWidget):
         # Add Navigation and Connect It
         self.navigation = NavigationWidget()
         self.layout.addWidget(self.navigation)
-        self.navigation.nextFrameButton.clicked.connect(self.nextFrame)
+        self.navigation.firstFrameButton.clicked.connect(self.firstFrame)
         self.navigation.prevFrameButton.clicked.connect(self.prevFrame)
+        self.navigation.prev2FrameButton.clicked.connect(self.prev2Frame)
+        self.navigation.prev3FrameButton.clicked.connect(self.prev3Frame)
+        self.navigation.nextFrameButton.clicked.connect(self.nextFrame)
+        self.navigation.next2FrameButton.clicked.connect(self.next2Frame)
+        self.navigation.next3FrameButton.clicked.connect(self.next3Frame)
+        self.navigation.lastFrameButton.clicked.connect(self.lastFrame)
 
         self.client = InferenceClient()
         self.client.startServer()
@@ -100,13 +119,43 @@ class MainWidget(QWidget):
         self.frameMax = 0
 
     @Slot()
+    def firstFrame(self):
+        self.frameN = 0
+        self.seekFrame()
+
+    @Slot()
+    def lastFrame(self):
+        self.frameN = self.frameMax
+        self.seekFrame()
+
+    @Slot()
     def nextFrame(self):
         self.frameN = self.frameN + 1
         self.seekFrame()
 
     @Slot()
+    def next2Frame(self):
+        self.frameN = self.frameN + 25
+        self.seekFrame()
+
+    @Slot()
+    def next3Frame(self):
+        self.frameN = self.frameN + 125
+        self.seekFrame()
+
+    @Slot()
     def prevFrame(self):
         self.frameN = self.frameN - 1
+        self.seekFrame()
+
+    @Slot()
+    def prev2Frame(self):
+        self.frameN = self.frameN - 25
+        self.seekFrame()
+
+    @Slot()
+    def prev3Frame(self):
+        self.frameN = self.frameN - 125
         self.seekFrame()
 
     def loadVideo(self, fileName):

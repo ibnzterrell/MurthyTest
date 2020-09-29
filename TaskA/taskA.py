@@ -5,7 +5,9 @@ from PySide2.QtGui import QKeySequence
 import multiprocessing as mp
 import numpy as np
 import cv2
-
+import server
+import zmq
+import json
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
@@ -45,6 +47,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Task A")
         self.setCentralWidget(self.widget)
 
+    def stopServerProcess(self):
+        self.widget.stopServerProcess()
+
     @Slot()
     def open_video(self):
         result = QFileDialog.getOpenFileName(
@@ -57,6 +62,8 @@ class MainWindow(QMainWindow):
         result = QFileDialog.getOpenFileName(
             self, "Open Model", "./", "Model Files (*.h5)")
         fileName = result[0]
+        self.serverStatus.setText("Model Loaded")
+        self.widget.loadModel(fileName)
 
 
 class MainWidget(QWidget):
@@ -67,6 +74,8 @@ class MainWidget(QWidget):
         self.canvas = FigureCanvas(self.figure)
         self.layout = QVBoxLayout(self)
         self.layout.addWidget(self.canvas)
+        self.client = Client()
+        self.client.runServerProcess()
 
     def loadVideo(self, fileName):
         self.reader = cv2.VideoCapture(fileName)
@@ -80,10 +89,38 @@ class MainWidget(QWidget):
         self.ax.imshow(img.squeeze(), cmap="gray")
         self.canvas.draw()
 
+    def loadModel(self, fileName):
+        self.client.sendCommand("loadModel", fileName)
+
+    def stopServerProcess(self):
+        self.client.stopServerProcess()
+
+
+class Client:
+    def runServerProcess(self):
+        self.p = mp.Process(target=server.process)
+        self.p.start()
+        self.context = zmq.Context()
+        self.socket = self.context.socket(zmq.REQ)
+        self.socket.connect("tcp://localhost:8888")
+
+    def stopServerProcess(self):
+        self.sendCommand("shutdown")
+        self.p.join()
+
+    def sendCommand(self, opCode, payload=""):
+        command = {
+            "opCode": opCode,
+            "payload": payload
+        }
+        self.socket.send_json(command)
+        response = self.socket.recv_json()
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    mainWidget = MainWidget()
     mainWindow = MainWindow()
     mainWindow.show()
-    sys.exit(app.exec_())
+    result = app.exec_()
+    mainWindow.stopServerProcess()
+    sys.exit(result)

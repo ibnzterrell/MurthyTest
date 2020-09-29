@@ -22,8 +22,8 @@ class MainWindow(QMainWindow):
         self.file_menu = self.menu.addMenu("File")
         self.model_menu = self.menu.addMenu("Model")
 
-        # File->Open Video Action
-        open_action = QAction("Open File...", self)
+        # File->Open Video File Action
+        open_action = QAction("Open Video File...", self)
         open_action.setShortcut(QKeySequence.Open)
         open_action.triggered.connect(self.open_video)
         self.file_menu.addAction(open_action)
@@ -34,8 +34,8 @@ class MainWindow(QMainWindow):
         exit_action.triggered.connect(self.close)
         self.file_menu.addAction(exit_action)
 
-        # Model->Open Model Action
-        open_model = QAction("Open Model...", self)
+        # Model->Open Model File Action
+        open_model = QAction("Load Model File...", self)
         open_model.triggered.connect(self.open_model)
         self.model_menu.addAction(open_model)
 

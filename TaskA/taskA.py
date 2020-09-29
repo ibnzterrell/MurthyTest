@@ -1,5 +1,5 @@
 import sys
-from PySide2.QtWidgets import QAction, QApplication, QFileDialog, QLabel, QMainWindow, QPushButton, QVBoxLayout, QWidget
+from PySide2.QtWidgets import QAction, QApplication, QFileDialog, QHBoxLayout, QLabel, QMainWindow, QPushButton, QVBoxLayout, QWidget
 from PySide2.QtCore import Slot
 from PySide2.QtGui import QKeySequence
 import multiprocessing as mp
@@ -66,6 +66,18 @@ class MainWindow(QMainWindow):
         self.widget.loadModel(fileName)
 
 
+class NavigationWidget(QWidget):
+    def __init__(self):
+        QWidget.__init__(self)
+        self.layout = QHBoxLayout(self)
+        self.frameLabel = QLabel("0")
+        self.prevFrameButton = QPushButton("<")
+        self.nextFrameButton = QPushButton(">")
+        self.layout.addWidget(self.prevFrameButton)
+        self.layout.addWidget(self.frameLabel)
+        self.layout.addWidget(self.nextFrameButton)
+
+
 class MainWidget(QWidget):
     def __init__(self):
         QWidget.__init__(self)
@@ -74,23 +86,49 @@ class MainWidget(QWidget):
         self.canvas = FigureCanvas(self.figure)
         self.layout = QVBoxLayout(self)
         self.layout.addWidget(self.canvas)
+        self.navigation = NavigationWidget()
+        self.layout.addWidget(self.navigation)
+        self.navigation.nextFrameButton.clicked.connect(self.nextFrame)
+        self.navigation.prevFrameButton.clicked.connect(self.prevFrame)
         self.client = Client()
         self.client.runServerProcess()
         self.client.predictCallback = self.showPrediction
+        self.frameN = 0
+        self.frameMax = 0
+
+    @Slot()
+    def nextFrame(self):
+        self.frameN = self.frameN + 1
+        self.seekFrame()
+
+    @Slot()
+    def prevFrame(self):
+        self.frameN = self.frameN - 1
+        self.seekFrame()
 
     def loadVideo(self, fileName):
         self.reader = cv2.VideoCapture(fileName)
-        n_frames = int(self.reader.get(cv2.CAP_PROP_FRAME_COUNT))
-        self.seekFrame(0)
+        self.frameN = 0
+        self.frameMax = int(self.reader.get(cv2.CAP_PROP_FRAME_COUNT)) - 1
+        self.seekFrame()
 
-    def seekFrame(self, frameN):
-        self.reader.set(cv2.CAP_PROP_POS_FRAMES, frameN)
+    def seekFrame(self):
+        # Clamp frameN to valid frames
+        if (self.frameN < 0):
+            self.frameN = 0
+        if (self.frameN > self.frameMax):
+            self.frameN = self.frameMax
+        self.navigation.frameLabel.setText(str(self.frameN))
+
+        self.reader.set(cv2.CAP_PROP_POS_FRAMES, self.frameN)
         status, self.img = self.reader.read()
         self.img = self.img[:, :, :1]  # convert to grayscale
+
+        # Show image while we wait for prediction
         self.ax.imshow(self.img.squeeze(), cmap="gray")
-        print(self.img)
-        self.client.sendCommand("predict", self.img.tolist())
         self.canvas.draw()
+
+        self.client.sendCommand("predict", self.img.tolist())
 
     def showPrediction(self, response):
         heatmap = np.asarray(response["payload"])
